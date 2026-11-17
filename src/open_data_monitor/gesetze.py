@@ -39,6 +39,10 @@ MAX_RETRIES = 4
 MIN_LIVE_SHARE = 0.9            # Liefert die Liste weniger als 90 % der bekannten Gesetze,
                                 # wird nichts als entfernt markiert (Schutz vor API-Aussetzern)
 
+# Namespace der Gesetzestexte. Das Portal hat ihn inzwischen geaendert
+# (frueher LegalDocML.de/1.8.2, seit Herbst 2026 rechtsinformationen.bund.de/
+# schema/norm/0.1). parse_norms liest ihn deshalb aus dem Wurzelelement;
+# dieser Wert dient nur als Rueckfall, falls das Dokument keinen hat.
 AKN = "{http://Inhaltsdaten.LegalDocML.de/1.8.2/}"
 
 SCHEMA = """
@@ -155,29 +159,35 @@ def _clean_text(element: ET.Element) -> str:
     return " ".join(" ".join(element.itertext()).split())
 
 
+def namespace_of(root: ET.Element) -> str:
+    """'{http://...}akomaNtoso' -> '{http://...}'"""
+    return root.tag[:root.tag.index("}") + 1] if root.tag.startswith("{") else AKN
+
+
 def parse_norms(xml_bytes: bytes) -> tuple[list[dict], str | None]:
     """Zerlegt das LegalDocML-XML in Paragraphen/Artikel.
     Gibt (Liste der Normen, 'zuletzt geaendert durch'-Vermerk) zurueck."""
     root = ET.fromstring(xml_bytes)
+    akn = namespace_of(root)
 
     # Artikel, die in anderen Artikeln stecken (z. B. zitierte Aenderungsbefehle),
     # gehoeren zu ihrem aeusseren Artikel und werden nicht einzeln gezaehlt.
-    articles = list(root.iter(AKN + "article"))
+    articles = list(root.iter(akn + "article"))
     nested = {
-        inner for art in articles for inner in art.iter(AKN + "article") if inner is not art
+        inner for art in articles for inner in art.iter(akn + "article") if inner is not art
     }
 
     norms = []
     for art in articles:
         if art in nested:
             continue
-        num = art.find(AKN + "num")
-        heading = art.find(AKN + "heading")
+        num = art.find(akn + "num")
+        heading = art.find(akn + "heading")
         # Ein Absatz pro Zeile, damit Diffs spaeter lesbar sind
         lines = [
             _clean_text(child)
             for child in art
-            if child.tag not in (AKN + "num", AKN + "heading")
+            if child.tag not in (akn + "num", akn + "heading")
         ]
         norms.append({
             "eid": art.get("eId"),
