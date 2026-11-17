@@ -1,0 +1,61 @@
+GESETZE-SCRAPER - ERKLAERUNG
+============================
+
+Ziel: auswerten, welche Bundesgesetze/-verordnungen wie geaendert wurden.
+
+Quelle
+------
+rechtsinformationen.bund.de (Rechtsinformationsportal des Bundes, Testphase)
+  - API ohne Schluessel: https://testphase.rechtsinformationen.bund.de/v1/legislation
+  - Doku: https://docs.rechtsinformationen.bund.de/
+  - Limit: 600 Anfragen/Minute pro IP (Skript nutzt max. ~300)
+  - Stand 2026-09-28: ca. 5.500 Gesetze und Verordnungen des Bundes
+  - Texte als XML im Format LegalDocML.de (Paragraphen mit stabiler eId)
+
+WICHTIGE EINSCHRAENKUNG: Die API liefert nur die AKTUELLE Fassung jedes
+Gesetzes. Fruehere Fassungen sind laut Doku "geplant", aber noch nicht
+abrufbar. Die im XML enthaltenen Lebenszyklus-Ereignisse haben nur
+Platzhalter-Daten (1001-01-01). Brauchbar ist nur der Vermerk
+"zuletzt geaendert durch Art. X G v. ...".
+=> Die Aenderungshistorie beginnt mit dem ersten Lauf dieses Skripts.
+   Das Skript sollte daher regelmaessig laufen (z. B. taeglich per cron).
+
+Ablauf (gesetze_scraper.py)
+---------------------------
+1. Liste aller Gesetze holen (~19 Seiten a 300 Eintraege).
+   Jeder Eintrag hat eine ELI mit Fassungsdatum, z. B.
+       eli/bund/bgbl-1/2004/s1950/2026-07-29/1/deu
+       \_______ Werk ________/ \_ Fassung _/
+2. Fassungen, die noch nicht in der DB sind, als XML laden und in
+   Paragraphen zerlegen. Erster Lauf: alle (~30-45 min), danach nur Neues.
+3. Nicht mehr gelistete Gesetze bekommen ein Datum in laws.removed_at
+   (nur wenn die Liste plausibel vollstaendig war).
+
+Datenbank (gesetze.db)
+----------------------
+  laws        ein Eintrag je Gesetz (Werk)
+  versions    ein Eintrag je Fassung - mehrere Zeilen je Gesetz = Aenderungen
+  norms       Paragraphen/Artikel je Fassung (Nummer, Ueberschrift, Text-Hash)
+  norm_texts  Paragraphentexte, dedupliziert ueber den Hash - unveraenderte
+              Paragraphen belegen bei neuen Fassungen keinen weiteren Platz
+
+Auswertung (gesetze_aenderungen.py)
+-----------------------------------
+  python gesetze_aenderungen.py              Uebersicht: welches Gesetz, wann, wie viele
+                                             Paragraphen geaendert/neu/weggefallen
+  python gesetze_aenderungen.py AufenthG     wortgenaue Aenderungen: [-alt-] {+neu+}
+  python gesetze_aenderungen.py --csv x.csv  jede Paragraph-Aenderung als CSV-Zeile
+
+Nicht erfasst: Anlagen/Tabellen ausserhalb von Paragraphen, Landesrecht,
+Gesetzgebungsverfahren (dafuer: DIP-API des Bundestags, siehe unten).
+
+Ausbau: DIP-API des Bundestags
+------------------------------
+Liefert Gesetzgebungsvorgaenge (Entwurf, Drucksachen, Beschluesse, Verkuendung)
+auch historisch - also WARUM und DURCH WELCHES VERFAHREN ein Gesetz geaendert
+wurde. Verknuepfbar ueber die BGBl-Fundstelle (Filter f.verkuendung_fundstelle).
+  - https://search.dip.bundestag.de/api/v1 , Doku: .../api/v1/openapi.yaml
+  - braucht API-Key: oeffentlicher Key auf https://dip.bundestag.de/über-dip/hilfe/api
+    (wechselt regelmaessig) oder eigener Key per Mail an
+    parlamentsdokumentation@bundestag.de
+  - max. 25 gleichzeitige Anfragen

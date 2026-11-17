@@ -1,0 +1,26 @@
+# Laufzeitdaten - nicht ins Repository
+*.db
+*.db-journal
+*.sqlite
+*.log
+*.csv
+*.zst
+ep_votes.json
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+
+# Editor/Tools
+.claude/
+.idea/
+.vscode/

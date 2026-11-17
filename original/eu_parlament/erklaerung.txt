@@ -1,0 +1,85 @@
+====================================================
+EU-PARLAMENT ABSTIMMUNGS-SCRAPER - ERKLAERUNG
+====================================================
+
+1. QUELLE
+----------
+Statt einzelne Seiten von europarl.europa.eu abzuklappern, wird ein
+fertiger Bulk-Dump von Parltrack (https://parltrack.org) genutzt:
+
+    https://parltrack.org/dumps/ep_votes.json.zst
+
+Parltrack ist eine seit Jahren gepflegte offene Datenbank (ODBL-Lizenz),
+die namentliche Plenarabstimmungen direkt aus den offiziellen
+"proces-verbal"-XML-Dokumenten des EU-Parlaments aufbereitet. Jeder
+Datensatz enthaelt unter "url" den Link auf das Original-Dokument bei
+europarl.europa.eu - die Herkunft ist damit nachvollziehbar.
+
+Warum kein direkter Scraper gegen data.europarl.europa.eu?
+Die offizielle API liefert Abstimmungsergebnisse erst mit mehreren
+Wochen Verzoegerung und es war beim Testen nicht zuverlaessig zu
+ermitteln, ob/wie Fraktions-Aufschluesselungen dort direkt abrufbar
+sind. Der Parltrack-Dump liefert dieselben Rohdaten (Original-Quelle
+EU-Parlament) in einer bereits sauber strukturierten, kompakten Form.
+
+2. ABLAUF DES SKRIPTS
+----------------------
+1. Download von ep_votes.json.zst (~11 MB, alle Abstimmungen seit 2004)
+2. Entpacken mit dem Kommandozeilenwerkzeug "zstd"
+3. Filtern auf Abstimmungen ab MIN_DATE (Standard: 2015-01-01)
+4. Speichern in SQLite (eu_abstimmungen.db)
+5. Die grossen Zwischendateien (.zst, entpacktes .json, ca. 660 MB
+   zusammen) werden danach geloescht - nur die gefilterte,
+   aufbereitete SQLite-Datenbank bleibt liegen.
+
+3. DATENBANK-STRUKTUR (2 TABELLEN)
+------------------------------------
+  votes
+  -----
+  voteid (PRIMARY KEY), ts (Zeitstempel), title, doc (Berichts-Nr.,
+  z. B. "A8-0347/2015"), epref (Dossier-Referenz, z. B.
+  "2015/0903(NLE)"), source_url (Original-EU-Dokument),
+  total_dafuer, total_dagegen, total_enthaltung
+
+  vote_fraktionen
+  ----------------
+  voteid, choice ("dafuer"/"dagegen"/"enthaltung"), fraktion
+  (z. B. "PPE", "S&D", "Renew", "Verts/ALE", "ECR", "The Left", "PfE",
+  "ESN", "NI"), anzahl (wie viele Mitglieder dieser Fraktion so
+  gestimmt haben)
+  -> KEINE einzelnen Abgeordneten gespeichert, nur Anzahl pro
+     Fraktion und Abstimmung (das war die gewuenschte Detailtiefe).
+
+4. BEISPIELABFRAGEN
+---------------------
+Wie hat eine Fraktion insgesamt seit 2015 abgestimmt:
+
+    SELECT choice, SUM(anzahl) FROM vote_fraktionen
+    WHERE fraktion = 'Verts/ALE'
+    GROUP BY choice;
+
+Alle Abstimmungen zu einem bestimmten Dossier:
+
+    SELECT ts, title, total_dafuer, total_dagegen
+    FROM votes WHERE epref LIKE '%2015/0903%';
+
+Fraktionsergebnis einer einzelnen Abstimmung:
+
+    SELECT choice, fraktion, anzahl FROM vote_fraktionen
+    WHERE voteid = '189210' ORDER BY choice, anzahl DESC;
+
+5. MENGENGERUEST (Lauf vom 05.08.2026)
+-----------------------------------------
+    Abstimmungen gesamt bei Parltrack (seit 2004): 44.648
+    Davon ab 2015-01-01 uebernommen:                34.130
+    Zeilen in vote_fraktionen:                     622.711
+    Groesse eu_abstimmungen.db:                      ~47 MB
+    Laufzeit (Download+Verarbeitung):                 ~33 Sekunden
+
+6. AUSFUEHREN
+---------------
+    pip install requests
+    apt install zstd     (falls nicht vorhanden)
+    python3 eu_abstimmungen_scraper.py
+
+Ergebnis: eu_abstimmungen.db im selben Verzeichnis.
