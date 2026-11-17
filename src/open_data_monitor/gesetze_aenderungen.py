@@ -2,20 +2,18 @@
 Auswertung: welche Gesetze wurden wie geaendert?
 
 Vergleicht aufeinanderfolgende Fassungen aus gesetze.db (befuellt von
-gesetze_scraper.py) Paragraph fuer Paragraph.
+gesetze.py) Paragraph fuer Paragraph.
 
-Aufruf:
-    python gesetze_aenderungen.py                # Uebersicht aller geaenderten Gesetze
-    python gesetze_aenderungen.py AufenthG       # Wortgenaue Aenderungen eines Gesetzes
-    python gesetze_aenderungen.py --csv out.csv  # Uebersicht als CSV (eine Zeile je Paragraph-Aenderung)
+Aufruf ueber die CLI:
+    python -m open_data_monitor gesetze-aenderungen                # Uebersicht aller geaenderten Gesetze
+    python -m open_data_monitor gesetze-aenderungen AufenthG       # Wortgenaue Aenderungen eines Gesetzes
+    python -m open_data_monitor gesetze-aenderungen --csv out.csv  # Uebersicht als CSV
 """
 
-import argparse
 import csv
 import difflib
 import sqlite3
-
-DB_PATH = "gesetze.db"
+from pathlib import Path
 
 
 def load_norms(conn: sqlite3.Connection, expression_eli: str) -> dict[str, tuple]:
@@ -152,20 +150,10 @@ def overview(conn: sqlite3.Connection, csv_path: str | None) -> None:
         print(f"{len(rows)} Paragraph-Aenderungen nach '{csv_path}' geschrieben.")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("abkuerzung", nargs="?", help="Gesetzesabkuerzung, z. B. AufenthG")
-    parser.add_argument("--csv", help="Uebersicht zusaetzlich als CSV speichern")
-    parser.add_argument("--db", default=DB_PATH)
-    args = parser.parse_args()
-
-    conn = sqlite3.connect(args.db)
-    if args.abkuerzung:
-        show_law(conn, args.abkuerzung)
+def run(db_path: str | Path, abbreviation: str | None = None, csv_path: str | None = None) -> None:
+    conn = sqlite3.connect(db_path)
+    if abbreviation:
+        show_law(conn, abbreviation)
     else:
-        overview(conn, args.csv)
+        overview(conn, csv_path)
     conn.close()
-
-
-if __name__ == "__main__":
-    main()

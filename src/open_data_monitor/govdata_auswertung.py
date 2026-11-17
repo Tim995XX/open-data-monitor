@@ -5,30 +5,27 @@ auf govdata.de veroeffentlicht (metadata_created)?
 WICHTIG: Das zeigt Veroeffentlichungs-/Aktualisierungsaktivitaet der
 Behoerden auf dem Datenportal - keine politischen Entscheidungen oder
 Gesetzesbeschluesse. govdata.de enthaelt keine Beschlussdaten.
+
+Die Tabellen gehen bewusst per print() auf die Standardausgabe: Sie sind
+das Ergebnis des Befehls, kein Protokoll (dafuer ist logging da).
 """
 
 import csv
 import re
 import sqlite3
 from collections import defaultdict
-
-DB_PATH = "govdata_kategorien.db"
-OUT_CSV = "auswertung_zeitverlauf.csv"
+from pathlib import Path
 
 
-def year_of(date_str: str) -> str | None:
+def year_of(date_str: str | None) -> str | None:
     if not date_str:
         return None
     match = re.match(r"(\d{4})-\d{2}-\d{2}", date_str)
     return match.group(1) if match else None
 
 
-def main() -> None:
-    conn = sqlite3.connect(DB_PATH)
-
-    categories = [row[0] for row in conn.execute("SELECT slug FROM categories ORDER BY slug")]
-    titles = dict(conn.execute("SELECT slug, title FROM categories"))
-
+def count_by_year(conn: sqlite3.Connection) -> dict[str, dict[str, int]]:
+    """Jahr -> Kategorie-Slug -> Anzahl aktiver Datensaetze (nach metadata_created)."""
     rows = conn.execute(
         """
         SELECT dc.category_slug, d.metadata_created
@@ -43,6 +40,16 @@ def main() -> None:
         year = year_of(created)
         if year:
             counts[year][slug] += 1
+    return counts
+
+
+def run(db_path: str | Path, out_csv: str | Path) -> None:
+    conn = sqlite3.connect(db_path)
+
+    categories = [row[0] for row in conn.execute("SELECT slug FROM categories ORDER BY slug")]
+    titles = dict(conn.execute("SELECT slug, title FROM categories"))
+    counts = count_by_year(conn)
+    conn.close()
 
     years = sorted(counts.keys())
 
@@ -64,18 +71,15 @@ def main() -> None:
         print("\t".join([year] + shares + [str(total)]))
 
     # CSV-Export fuer Weiterverarbeitung / Visualisierung
-    with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
+    Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["jahr"] + categories + ["summe"])
         for year in years:
             row_counts = [counts[year].get(c, 0) for c in categories]
             writer.writerow([year] + row_counts + [sum(row_counts)])
 
-    print(f"\nCSV geschrieben: {OUT_CSV}")
+    print(f"\nCSV geschrieben: {out_csv}")
     print("Kategorie-Titel zur Referenz:")
     for slug in categories:
         print(f"  {slug}: {titles[slug]}")
-
-
-if __name__ == "__main__":
-    main()
