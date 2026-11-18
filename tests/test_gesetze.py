@@ -5,18 +5,20 @@ from conftest import FakeResponse
 
 NS_NEU = "http://rechtsinformationen.bund.de/schema/norm/0.1"
 NS_ALT = "http://Inhaltsdaten.LegalDocML.de/1.8.2/"
+NS_RIS = "http://rechtsinformationen.bund.de/schema/norm-metadata/0.1"
 
 
 def beispiel_xml(ns: str = NS_NEU) -> bytes:
     """Gekuerztes Gesetz im LegalDocML-Aufbau: zwei Paragraphen, einer davon
-    mit einem zitierten (verschachtelten) Artikel, plus Stand-Vermerk."""
+    mit einem zitierten (verschachtelten) Artikel, plus Stand-Vermerk in den Metadaten."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<akn:akomaNtoso xmlns:akn="{ns}">
+<akn:akomaNtoso xmlns:akn="{ns}" xmlns:ris="{NS_RIS}">
   <akn:act>
-    <akn:meta><akn:proprietary>
-      <standangabe>Zuletzt  geändert durch Art. 1 G v. 1.1.2026</standangabe>
-      <hinweis>zuletzt geändert durch Art. 1 G v. 1.1.2026 I Nr. 5</hinweis>
-    </akn:proprietary></akn:meta>
+    <akn:meta><akn:proprietary><ris:legalDocML.de_metadaten>
+      <ris:standangabe type="neuf">Neugefasst durch Bek. v. 19.3.1991 I 686;</ris:standangabe>
+      <ris:standangabe type="stand">Zuletzt  geändert durch Art. 1 G v. 1.1.2026 I Nr. 5</ris:standangabe>
+      <ris:standangabe type="hinweis">Änderung durch Art. 4 G v. 2.2.2026 textlich nachgewiesen</ris:standangabe>
+    </ris:legalDocML.de_metadaten></akn:proprietary></akn:meta>
     <akn:body>
       <akn:article eId="art-z1">
         <akn:num>§ 1</akn:num>
@@ -93,7 +95,30 @@ def test_parse_norms_beide_namespaces(ns):
     assert norms[0]["text"] == "(1) Erster Absatz.\n(2) Zweiter Absatz ."
     assert norms[1]["heading"] is None
     assert "§ 99" in norms[1]["text"]  # gehoert zum aeusseren Paragraphen
-    assert amended == "zuletzt geändert durch Art. 1 G v. 1.1.2026 I Nr. 5"
+    assert amended == "Zuletzt geändert durch Art. 1 G v. 1.1.2026 I Nr. 5"
+
+
+def test_stand_vermerk_nicht_aus_zitat_im_paragraphentext():
+    """Echter Fall (ZApprO, WaffG): Ein Paragraph zitiert ein anderes Gesetz mit
+    "zuletzt geändert durch ...". Das darf nicht als Stand-Vermerk gelten."""
+    xml = f"""<akn:akomaNtoso xmlns:akn="{NS_NEU}" xmlns:ris="{NS_RIS}"><akn:act>
+      <akn:body><akn:article eId="art-z1"><akn:num>§ 1</akn:num><akn:paragraph><akn:content>
+        <akn:p>Erlaubnisse nach dem Gesetz vom 8. März 1976, zuletzt geändert durch das Gesetz
+        vom 21. November 1996, gelten fort.</akn:p></akn:content></akn:paragraph></akn:article></akn:body>
+      <akn:meta><akn:proprietary>
+        <ris:standangabe type="stand">Zuletzt geändert durch Art. 12 Abs. 20 G v. 22.10.2026 I Nr. 318</ris:standangabe>
+      </akn:proprietary></akn:meta>
+    </akn:act></akn:akomaNtoso>""".encode("utf-8")
+    assert gesetze.parse_norms(xml)[1] == "Zuletzt geändert durch Art. 12 Abs. 20 G v. 22.10.2026 I Nr. 318"
+
+
+def test_ohne_stand_vermerk_kein_raten():
+    """Stammfassung ohne Änderungen: lieber None als ein zufälliger Treffer im Text."""
+    xml = f"""<akn:akomaNtoso xmlns:akn="{NS_NEU}"><akn:act><akn:body>
+      <akn:article eId="art-z1"><akn:num>§ 1</akn:num><akn:paragraph><akn:content>
+        <akn:p>Das Gesetz X, zuletzt geändert durch Art. 1 G v. 1.1.2000, bleibt unberührt.</akn:p>
+      </akn:content></akn:paragraph></akn:article></akn:body></akn:act></akn:akomaNtoso>""".encode("utf-8")
+    assert gesetze.parse_norms(xml)[1] is None
 
 
 def test_save_version_dedupliziert_texte(conn):

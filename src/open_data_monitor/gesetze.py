@@ -18,7 +18,6 @@ Details: siehe docs/gesetze.md
 
 import hashlib
 import logging
-import re
 import sqlite3
 import time
 import xml.etree.ElementTree as ET
@@ -196,9 +195,22 @@ def parse_norms(xml_bytes: bytes) -> tuple[list[dict], str | None]:
             "text": "\n".join(line for line in lines if line),
         })
 
-    match = re.search(r"zuletzt geändert durch[^<]*", xml_bytes.decode("utf-8", errors="replace"))
-    last_amended_by = " ".join(match.group(0).split()) if match else None
-    return norms, last_amended_by
+    return norms, last_amended_from(root)
+
+
+def last_amended_from(root: ET.Element) -> str | None:
+    """Liest den Stand-Vermerk aus den Metadaten:
+    <ris:standangabe type="stand">Zuletzt geändert durch Art. 13 G v. ...</ris:standangabe>
+
+    Bewusst nicht per Textsuche im ganzen Dokument: Die Formulierung
+    "zuletzt geändert durch" kommt auch in Paragraphen vor, die andere Gesetze
+    zitieren. Der Namespace wird ignoriert (er hat schon einmal gewechselt)."""
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] == "standangabe" and element.get("type") == "stand":
+            text = _clean_text(element)
+            if text:
+                return text
+    return None
 
 
 def text_hash(text: str) -> str:
