@@ -151,6 +151,10 @@ beim Gesetze-Scraper, weil die Quelle keine alten Fassungen liefert.
   politischen Entscheidungen. Ein erster Volllauf dauert 15–25 Minuten.
 - Keine Parallelisierung – bewusst, um die Quellen nicht zu belasten.
 
+## Hinweis
+
+Dieses Projekt wurde mithilfe von Claude (Anthropic) erstellt.
+
 ## Lizenz
 
 [MIT](LICENSE). Die abgerufenen Daten unterliegen den Lizenzen der jeweiligen
