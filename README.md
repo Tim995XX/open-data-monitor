@@ -1,5 +1,7 @@
 # open-data-monitor
 
+[![CI](https://github.com/Tim995XX/open-data-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Tim995XX/open-data-monitor/actions/workflows/ci.yml)
+
 Beobachtet drei offene Datenquellen der öffentlichen Hand, speichert ihren Stand
 in SQLite und macht Änderungen im Zeitverlauf auswertbar:
 
